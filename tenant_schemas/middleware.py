@@ -24,9 +24,12 @@ class TenantMiddleware(object):
         connection.set_schema_to_public()
         hostname = self.hostname_from_request(request)
 
-        request.tenant = get_object_or_404(
-            get_tenant_model(), domain_url=hostname)
-        connection.set_tenant(request.tenant)
+        tenant_model = get_tenant_model()
+        try:
+            request.tenant = tenant_model.objects.get(domain_url=hostname)
+            connection.set_tenant(request.tenant)
+        except tenant_model.DoesNotExist:
+            pass
 
         # Content type can no longer be cached as public and tenant schemas
         # have different models. If someone wants to change this, the cache
