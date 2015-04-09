@@ -134,14 +134,13 @@ class SyncCommon(BaseCommand):
         make_option('--shared', action='store_true', dest='shared', default=False,
                     help='Tells Django to populate only shared applications.'),
         make_option("-s", "--schema", dest="schema_name"),
-        make_option("-v", "--verbosity", dest="verbosity"),
     )
 
     def handle(self, *args, **options):
         self.sync_tenant = options.get('tenant')
         self.sync_public = options.get('shared')
         self.schema_name = options.get('schema_name')
-        self.verbosity = options.get('verbosity')
+        self.verbosity = int(options.get('verbosity'))
         self.installed_apps = settings.INSTALLED_APPS
         self.args = args
         self.options = options
