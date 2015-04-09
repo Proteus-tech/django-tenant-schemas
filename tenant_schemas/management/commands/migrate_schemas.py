@@ -46,7 +46,7 @@ class MigrateSchemasCommand(SyncCommon):
 
     def run_migrations(self, schema_name, included_apps):
         if self.verbosity is None or self.verbosity > 0:
-	    self._notice("=== Running migrate for schema %s" % schema_name)
+            self._notice("=== Running migrate for schema %s" % schema_name)
         connection.set_schema(schema_name)
         command = MigrateCommand()
 
