@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
-from django.shortcuts import get_object_or_404
 from tenant_schemas.utils import (get_tenant_model, remove_www,
                                   get_public_schema_name)
 
