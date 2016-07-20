@@ -1,30 +1,28 @@
-import django
-from optparse import NO_DEFAULT
-
-if django.VERSION >= (1, 7, 0):
-    from django.core.management.commands.migrate import Command as MigrateCommand
-    from django.db.migrations.recorder import MigrationRecorder
-from django.db import connection
 from django.conf import settings
+from django.core.management.commands.migrate import Command as MigrateCommand
+from django.db import connection
 
-from tenant_schemas.utils import get_tenant_model, get_public_schema_name, schema_exists
 from tenant_schemas.management.commands import SyncCommon
+from tenant_schemas.utils import get_tenant_model, get_public_schema_name, schema_exists
 
 
-class MigrateSchemasCommand(SyncCommon):
+class Command(SyncCommon):
     help = "Updates database schema. Manages both apps with migrations and those without."
 
-    def run_from_argv(self, argv):
+    def __init__(self, stdout=None, stderr=None, no_color=False):
         """
-        Changes the option_list to use the options from the wrapped command.
-        Adds schema parameter to specify which schema will be used when
-        executing the wrapped command.
+        Changes the option_list to use the options from the wrapped migrate command.
         """
         self.option_list += MigrateCommand.option_list
-        super(MigrateSchemasCommand, self).run_from_argv(argv)
+        super(Command, self).__init__(stdout, stderr, no_color)
+
+    def add_arguments(self, parser):
+        super(Command, self).add_arguments(parser)
+        command = MigrateCommand()
+        command.add_arguments(parser)
 
     def handle(self, *args, **options):
-        super(MigrateSchemasCommand, self).handle(*args, **options)
+        super(Command, self).handle(*args, **options)
         self.PUBLIC_SCHEMA_NAME = get_public_schema_name()
 
         if self.sync_public and not self.schema_name:
@@ -49,24 +47,8 @@ class MigrateSchemasCommand(SyncCommon):
             self._notice("=== Running migrate for schema %s" % schema_name)
         connection.set_schema(schema_name)
         command = MigrateCommand()
-
-        defaults = {}
-        for opt in MigrateCommand.option_list:
-            if opt.dest in self.options:
-                defaults[opt.dest] = self.options[opt.dest]
-            elif opt.default is NO_DEFAULT:
-                defaults[opt.dest] = None
-            else:
-                defaults[opt.dest] = opt.default
-
-        command.execute(*self.args, **defaults)
+        command.execute(*self.args, **self.options)
         connection.set_schema_to_public()
 
     def _notice(self, output):
         self.stdout.write(self.style.NOTICE(output))
-
-
-if django.VERSION >= (1, 7, 0):
-    Command = MigrateSchemasCommand
-else:
-    from .legacy.migrate_schemas import Command

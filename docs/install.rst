@@ -29,13 +29,16 @@ Add `tenant_schemas.routers.TenantSyncRouter` to your `DATABASE_ROUTERS` setting
     DATABASE_ROUTERS = (
         'tenant_schemas.routers.TenantSyncRouter',
     )
-    
+
 Add the middleware ``tenant_schemas.middleware.TenantMiddleware`` to the top of ``MIDDLEWARE_CLASSES``, so that each request can be set to use the correct schema.
+
+If the hostname in the request does not match a valid tenant ``domain_url``, a HTTP 404 Not Found will be returned. If you'd like to raise ``DisallowedHost`` and a HTTP 400 response instead, use the ``tenant_schemas.middleware.SuspiciousTenantMiddleware``.
 
 .. code-block:: python
     
     MIDDLEWARE_CLASSES = (
         'tenant_schemas.middleware.TenantMiddleware',
+        # 'tenant_schemas.middleware.SuspiciousTenantMiddleware',
         #...
     )
     
@@ -66,12 +69,18 @@ Now we have to create your tenant model. Your tenant model can contain whichever
         # default true, schema will be automatically created and synced when it is saved
         auto_create_schema = True 
 
+Once you have defined your model, don't forget to create the migrations for it or otherwise Django >= 1.9 will not create its table. Replace ``customers`` with your app name.
+
+.. code-block:: bash
+
+    python manage.py makemigrations customers
+
 Configure Tenant and Shared Applications
 ========================================
 To make use of shared and tenant-specific applications, there are two settings called ``SHARED_APPS`` and ``TENANT_APPS``. ``SHARED_APPS`` is a tuple of strings just like ``INSTALLED_APPS`` and should contain all apps that you want to be synced to ``public``. If ``SHARED_APPS`` is set, then these are the only apps that will be synced to your ``public`` schema! The same applies for ``TENANT_APPS``, it expects a tuple of strings where each string is an app. If set, only those applications will be synced to all your tenants. Here's a sample setting
 
 .. code-block:: python
-
+    
     SHARED_APPS = (
         'tenant_schemas',  # mandatory
         'customers', # you must list the app where your tenant model resides in
@@ -95,7 +104,7 @@ To make use of shared and tenant-specific applications, there are two settings c
         'myapp.houses', 
     )
 
-    INSTALLED_APPS = list(set(SHARED_APPS + TENANT_APPS))
+    INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
 
 You also have to set where your tenant model is.
 
@@ -103,20 +112,16 @@ You also have to set where your tenant model is.
 
     TENANT_MODEL = "customers.Client" # app.Model
     
-Now run ``migrate_schemas --shared`` (``sync_schemas --shared`` if you're on Django 1.6 or older), this will create the shared apps on the ``public`` schema. Note: your database should be empty if this is the first time you're running this command.
+Now run ``migrate_schemas --shared`` to create the shared apps on the ``public`` schema. Note: your database should be empty if this is the first time you're running this command.
 
 .. code-block:: bash
 
-    # Django >= 1.7
     python manage.py migrate_schemas --shared
 
-    # Django < 1.7
-    python manage.py sync_schemas --shared
-    
 .. warning::
 
-   Never use ``migrate`` or ``syncdb`` as it would sync *all* your apps to ``public``!
-    
+   Never use ``migrate`` as it would sync *all* your apps to ``public``!
+
 Lastly, you need to create a tenant whose schema is ``public`` and it's address is your domain URL. Please see the section on :doc:`use <use>`.
 
 You can also specify extra schemas that should be visible to all queries using
@@ -135,34 +140,6 @@ globally.
    available globally. This helps avoid issues caused by hiding the public
    schema from queries.
 
-South Migrations
-================
-If you're on Django 1.6 or older, this app supports `South <http://south.aeracode.org/>`_  so if you haven't configured it yet and would like to:
-
-For Django 1.1 or below
-
-.. code-block:: python
-
-    SOUTH_DATABASE_ADAPTER = 'south.db.postgresql_psycopg2'
-
-For Django 1.2 or above
-
-.. code-block:: python
-
-    SOUTH_DATABASE_ADAPTERS = {
-        'default': 'south.db.postgresql_psycopg2',
-    }
-    
-You can list ``south`` under ``TENANT_APPS`` and ``SHARED_APPS`` if you want.
-
-We override ``south``'s ``syncdb`` and ``migrate`` command, so you'll need to change your ``INSTALLED_APPS`` to
-
-.. code-block:: python
-
-    INSTALLED_APPS = SHARED_APPS + TENANT_APPS + ('tenant_schemas',)
-    
-This makes sure ``tenant_schemas`` is the last on the list and therefore always has precedence when running an overridden command.
-
 Optional Settings
 =================
 
@@ -176,7 +153,7 @@ Optional Settings
 
     :Default: ``'True'``
     
-    Sets if the models will be synced directly to the last version and all migration subsequently faked. Useful in the cases where migrations can not be faked and need to be ran individually. Be aware that setting this to `False` may significantly slow down the process of creating tenants. Only relevant if `South <http://south.aeracode.org/>`_ is used.
+    Sets if the models will be synced directly to the last version and all migration subsequently faked. Useful in the cases where migrations can not be faked and need to be ran individually. Be aware that setting this to `False` may significantly slow down the process of creating tenants.
 
 Tenant View-Routing
 -------------------
@@ -212,6 +189,24 @@ If you put this in the same Django project, you can make a new ``settings_public
 
 Or you can create a completely separate project for the main website.
 
+Caching
+-------
+
+To enable tenant aware caching you can set the `KEY_FUNCTION <https://docs.djangoproject.com/en/1.8/ref/settings/#std:setting-CACHES-KEY_FUNCTION>`_ setting to use the provided ``make_key`` helper function which
+adds the tenants ``schema_name`` as the first key prefix.
+
+.. code-block:: python
+
+    CACHES = {
+        "default": {
+            ...
+            'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
+            'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key',
+        },
+    }
+
+The ``REVERSE_KEY_FUNCTION`` setting is only required if you are using the `django-redis <https://github.com/niwinz/django-redis>`_ cache backend.
+
 Configuring your Apache Server (optional)
 =========================================
 Here's how you can configure your Apache server to route all subdomains to your django project so you don't have to setup any subdomains manually.
@@ -238,3 +233,4 @@ formats using `Sphinx <http://pypi.python.org/pypi/Sphinx>`_. To get started
     make html
 
 This creates the documentation in HTML format at ``docs/_build/html``.
+

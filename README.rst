@@ -102,7 +102,7 @@ Setup & Documentation
 
 **This is just a short setup guide**, it is **strongly** recommended
 that you read the complete version at
-`django-tenant-schemas.readthedocs.org`_.
+`django-tenant-schemas.readthedocs.io`_.
 
 Your ``DATABASE_ENGINE`` setting needs to be changed to
 
@@ -160,15 +160,14 @@ created ``Client`` inside an app named ``customers``, your
 
     TENANT_MODEL = "customers.Client" # app.Model
 
-Now run ``sync_schemas``, this will sync your apps to the ``public``
-schema.
+Now run ``migrate_schemas`` to sync your apps to the ``public`` schema.
 
 ::
 
-    python manage.py sync_schemas --shared
+    python manage.py migrate_schemas --shared
 
 Create your tenants just like a normal django model. Calling ``save``
-will automatically create and sync the schema.
+will automatically create and sync/migrate the schema.
 
 .. code-block:: python
 
@@ -192,7 +191,7 @@ so you shouldn’t need to change anything at your views.
 You’re all set, but we have left key details outside of this short
 tutorial, such as creating the public tenant and configuring shared and
 tenant specific apps. Complete instructions can be found at
-`django-tenant-schemas.readthedocs.org`_.
+`django-tenant-schemas.readthedocs.io`_.
 
 
 
@@ -201,9 +200,9 @@ tenant specific apps. Complete instructions can be found at
 .. _PostgreSQL’s official documentation on schemas: http://www.postgresql.org/docs/9.1/static/ddl-schemas.html
 .. _Multi-Tenant Data Architecture: http://msdn.microsoft.com/en-us/library/aa479086.aspx
 
-.. |PyPi version| image:: https://pypip.in/v/django-tenant-schemas/badge.png
-   :target: https://crate.io/packages/django-tenant-schemas/
-.. |PyPi downloads| image:: https://pypip.in/d/django-tenant-schemas/badge.png
-   :target: https://crate.io/packages/django-tenant-schemas/
-.. _setup: https://django-tenant-schemas.readthedocs.org/en/latest/install.html
-.. _django-tenant-schemas.readthedocs.org: https://django-tenant-schemas.readthedocs.org/en/latest/
+.. |PyPi version| image:: https://img.shields.io/pypi/v/django-tenant-schemas.svg
+   :target: https://pypi.python.org/pypi/django-tenant-schemas
+.. |PyPi downloads| image:: https://img.shields.io/pypi/dm/django-tenant-schemas.svg
+   :target: https://pypi.python.org/pypi/django-tenant-schemas
+.. _setup: https://django-tenant-schemas.readthedocs.io/en/latest/install.html
+.. _django-tenant-schemas.readthedocs.io: https://django-tenant-schemas.readthedocs.io/en/latest/

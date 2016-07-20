@@ -1,9 +1,12 @@
-import django
+import json
+from StringIO import StringIO
+
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.db import connection
-
 from dts_test_app.models import DummyModel, ModelWithFkToPublicUser
+
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.tests.models import Tenant, NonAutoSyncTenant
 from tenant_schemas.tests.testcases import BaseTestCase
@@ -25,14 +28,14 @@ class TenantDataAndSettingsTest(BaseTestCase):
                                 'django.contrib.auth', )
         settings.INSTALLED_APPS = settings.SHARED_APPS + settings.TENANT_APPS
         cls.sync_shared()
-        Tenant(domain_url='test.com', schema_name=get_public_schema_name()).save()
+        Tenant(domain_url='test.com', schema_name=get_public_schema_name()).save(verbosity=cls.get_verbosity())
 
     def test_tenant_schema_is_created(self):
         """
         When saving a tenant, it's schema should be created.
         """
         tenant = Tenant(domain_url='something.test.com', schema_name='test')
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         self.assertTrue(schema_exists(tenant.schema_name))
 
@@ -45,7 +48,7 @@ class TenantDataAndSettingsTest(BaseTestCase):
 
         tenant = NonAutoSyncTenant(domain_url='something.test.com',
                                    schema_name='test')
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         self.assertFalse(schema_exists(tenant.schema_name))
 
@@ -54,7 +57,7 @@ class TenantDataAndSettingsTest(BaseTestCase):
         When editing an existing tenant, all data should be kept.
         """
         tenant = Tenant(domain_url='something.test.com', schema_name='test')
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         # go to tenant's path
         connection.set_tenant(tenant)
@@ -66,7 +69,7 @@ class TenantDataAndSettingsTest(BaseTestCase):
         # edit tenant
         connection.set_schema_to_public()
         tenant.domain_url = 'example.com'
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         connection.set_tenant(tenant)
 
@@ -76,11 +79,11 @@ class TenantDataAndSettingsTest(BaseTestCase):
     def test_switching_search_path(self):
         tenant1 = Tenant(domain_url='something.test.com',
                          schema_name='tenant1')
-        tenant1.save()
+        tenant1.save(verbosity=BaseTestCase.get_verbosity())
 
         connection.set_schema_to_public()
         tenant2 = Tenant(domain_url='example.com', schema_name='tenant2')
-        tenant2.save()
+        tenant2.save(verbosity=BaseTestCase.get_verbosity())
 
         # go to tenant1's path
         connection.set_tenant(tenant1)
@@ -105,7 +108,7 @@ class TenantDataAndSettingsTest(BaseTestCase):
 
     def test_switching_tenant_without_previous_tenant(self):
         tenant = Tenant(domain_url='something.test.com', schema_name='test')
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         connection.tenant = None
         with tenant_context(tenant):
@@ -121,7 +124,7 @@ class TenantSyncTest(BaseTestCase):
     Tests if the shared apps and the tenant apps get synced correctly
     depending on if the public schema or a tenant is being synced.
     """
-    MIGRATION_TABLE_SIZE = 1 if django.VERSION >= (1, 7, 0) else 0
+    MIGRATION_TABLE_SIZE = 1
 
     def test_shared_apps_does_not_sync_tenant_apps(self):
         """
@@ -136,7 +139,7 @@ class TenantSyncTest(BaseTestCase):
         self.sync_shared()
 
         shared_tables = self.get_tables_list_in_schema(get_public_schema_name())
-        self.assertEqual(2+6+1+self.MIGRATION_TABLE_SIZE, len(shared_tables))
+        self.assertEqual(2 + 6 + 1 + self.MIGRATION_TABLE_SIZE, len(shared_tables))
         self.assertNotIn('django_session', shared_tables)
 
     def test_tenant_apps_does_not_sync_shared_apps(self):
@@ -151,10 +154,10 @@ class TenantSyncTest(BaseTestCase):
         settings.INSTALLED_APPS = settings.SHARED_APPS + settings.TENANT_APPS
         self.sync_shared()
         tenant = Tenant(domain_url='arbitrary.test.com', schema_name='test')
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         tenant_tables = self.get_tables_list_in_schema(tenant.schema_name)
-        self.assertEqual(1+self.MIGRATION_TABLE_SIZE, len(tenant_tables))
+        self.assertEqual(1 + self.MIGRATION_TABLE_SIZE, len(tenant_tables))
         self.assertIn('django_session', tenant_tables)
 
     def test_tenant_apps_and_shared_apps_can_have_the_same_apps(self):
@@ -170,13 +173,13 @@ class TenantSyncTest(BaseTestCase):
         settings.INSTALLED_APPS = settings.SHARED_APPS + settings.TENANT_APPS
         self.sync_shared()
         tenant = Tenant(domain_url='arbitrary.test.com', schema_name='test')
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         shared_tables = self.get_tables_list_in_schema(get_public_schema_name())
         tenant_tables = self.get_tables_list_in_schema(tenant.schema_name)
-        self.assertEqual(2+6+1+1+self.MIGRATION_TABLE_SIZE, len(shared_tables))
+        self.assertEqual(2 + 6 + 1 + 1 + self.MIGRATION_TABLE_SIZE, len(shared_tables))
         self.assertIn('django_session', shared_tables)
-        self.assertEqual(1+self.MIGRATION_TABLE_SIZE, len(tenant_tables))
+        self.assertEqual(1 + self.MIGRATION_TABLE_SIZE, len(tenant_tables))
         self.assertIn('django_session', tenant_tables)
 
     def test_content_types_is_not_mandatory(self):
@@ -190,14 +193,39 @@ class TenantSyncTest(BaseTestCase):
         settings.INSTALLED_APPS = settings.SHARED_APPS + settings.TENANT_APPS
         self.sync_shared()
         tenant = Tenant(domain_url='something.test.com', schema_name='test')
-        tenant.save()
+        tenant.save(verbosity=BaseTestCase.get_verbosity())
 
         shared_tables = self.get_tables_list_in_schema(get_public_schema_name())
         tenant_tables = self.get_tables_list_in_schema(tenant.schema_name)
-        self.assertEqual(2+1+self.MIGRATION_TABLE_SIZE, len(shared_tables))
+        self.assertEqual(2 + 1 + self.MIGRATION_TABLE_SIZE, len(shared_tables))
         self.assertIn('django_session', tenant_tables)
-        self.assertEqual(1+self.MIGRATION_TABLE_SIZE, len(tenant_tables))
+        self.assertEqual(1 + self.MIGRATION_TABLE_SIZE, len(tenant_tables))
         self.assertIn('django_session', tenant_tables)
+
+
+class TenantCommandTest(BaseTestCase):
+    def test_command(self):
+        """
+        Tests that tenant_command is capable of wrapping commands
+        and its parameters.
+        """
+        settings.SHARED_APPS = ('tenant_schemas',
+                                'django.contrib.contenttypes', )
+        settings.TENANT_APPS = ()
+        settings.INSTALLED_APPS = settings.SHARED_APPS + settings.TENANT_APPS
+        self.sync_shared()
+        Tenant(domain_url='localhost', schema_name='public').save(verbosity=BaseTestCase.get_verbosity())
+
+        out = StringIO()
+        call_command('tenant_command',
+                     args=('dumpdata', 'tenant_schemas'),
+                     natural_foreign=True,
+                     schema_name=get_public_schema_name(),
+                     stdout=out)
+        self.assertItemsEqual(
+            json.loads('[{"fields": {"domain_url": "localhost", "schema_name": "public"}, '
+                       '"model": "tenant_schemas.tenant", "pk": 1}]'),
+            json.loads(out.getvalue()))
 
 
 class SharedAuthTest(BaseTestCase):
@@ -210,11 +238,11 @@ class SharedAuthTest(BaseTestCase):
         settings.TENANT_APPS = ('dts_test_app', )
         settings.INSTALLED_APPS = settings.SHARED_APPS + settings.TENANT_APPS
         cls.sync_shared()
-        Tenant(domain_url='test.com', schema_name=get_public_schema_name()).save()
+        Tenant(domain_url='test.com', schema_name=get_public_schema_name()).save(verbosity=cls.get_verbosity())
 
         # Create a tenant
         cls.tenant = Tenant(domain_url='tenant.test.com', schema_name='tenant')
-        cls.tenant.save()
+        cls.tenant.save(verbosity=cls.get_verbosity())
 
         # Create some users
         with schema_context(get_public_schema_name()):  # this could actually also be executed inside a tenant
